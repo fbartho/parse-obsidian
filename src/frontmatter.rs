@@ -3,7 +3,7 @@
 //! Obsidian supports YAML metadata at the top of files, delimited by `---`.
 
 use ignore::WalkBuilder;
-use serde_yaml::Value;
+use serde_yml::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -41,7 +41,7 @@ pub fn parse_frontmatter(input: &str) -> Option<Frontmatter> {
     }
 
     // Parse the YAML
-    serde_yaml::from_str(yaml_content).ok()
+    serde_yml::from_str(yaml_content).ok()
 }
 
 fn find_closing_delimiter(content: &str) -> Option<usize> {

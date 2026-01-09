@@ -6,7 +6,7 @@ license = "MIT"
 
 [dependencies]
 comrak = "0.49"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 ignore = "0.4"
-serde = "1.0"
-serde_yaml = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_yml = "0.0"

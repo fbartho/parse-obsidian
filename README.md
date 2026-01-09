@@ -45,7 +45,7 @@ Parses internal links between notes.
 
 Parses YAML metadata blocks at the top of files.
 
-- Returns `HashMap<String, serde_yaml::Value>` for flexible access
+- Returns `HashMap<String, serde_yml::Value>` for flexible access
 - Supports all YAML types: strings, numbers, booleans, arrays, nested objects
 - Handles Obsidian properties like `tags`, `aliases`, `cssclasses`
 

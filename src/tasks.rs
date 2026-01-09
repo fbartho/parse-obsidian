@@ -7,12 +7,14 @@
 
 use chrono::NaiveDate;
 use ignore::WalkBuilder;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::Path;
 
 /// Task priority levels supported by the Tasks plugin.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Priority {
     /// ⏫ Highest priority
     Highest,
@@ -24,8 +26,19 @@ pub enum Priority {
     Lowest,
 }
 
+impl fmt::Display for Priority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Priority::Highest => write!(f, "⏫"),
+            Priority::High => write!(f, "🔼"),
+            Priority::Low => write!(f, "🔽"),
+            Priority::Lowest => write!(f, "⏬"),
+        }
+    }
+}
+
 /// A parsed task from an Obsidian markdown file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
     /// The task description with metadata stripped out.
     pub description: String,
@@ -43,6 +56,34 @@ pub struct Task {
     pub priority: Option<Priority>,
     /// Recurrence rule from `🔁 <pattern>`.
     pub recurrence: Option<String>,
+}
+
+impl fmt::Display for Task {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let checkbox = if self.completed { "[x]" } else { "[ ]" };
+        write!(f, "- {} {}", checkbox, self.description)?;
+
+        if let Some(priority) = &self.priority {
+            write!(f, " {}", priority)?;
+        }
+        if let Some(recurrence) = &self.recurrence {
+            write!(f, " 🔁 {}", recurrence)?;
+        }
+        if let Some(start) = &self.start_date {
+            write!(f, " 🛫 {}", start)?;
+        }
+        if let Some(scheduled) = &self.scheduled_date {
+            write!(f, " ⏳ {}", scheduled)?;
+        }
+        if let Some(due) = &self.due_date {
+            write!(f, " 📅 {}", due)?;
+        }
+        if let Some(done) = &self.done_date {
+            write!(f, " ✅ {}", done)?;
+        }
+
+        Ok(())
+    }
 }
 
 /// Extracts and parses all tasks from the given text.
@@ -455,5 +496,96 @@ Some other text
         let task = parse_task_line("- [ ] Fix bug #urgent #backend 📅 2024-01-15").unwrap();
         assert_eq!(task.description, "Fix bug #urgent #backend");
         assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+    }
+
+    #[test]
+    fn test_display_simple_task() {
+        let task = Task {
+            description: "Buy groceries".to_string(),
+            completed: false,
+            due_date: None,
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: None,
+            recurrence: None,
+        };
+        assert_eq!(task.to_string(), "- [ ] Buy groceries");
+    }
+
+    #[test]
+    fn test_display_completed_task() {
+        let task = Task {
+            description: "Done task".to_string(),
+            completed: true,
+            due_date: None,
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: None,
+            recurrence: None,
+        };
+        assert_eq!(task.to_string(), "- [x] Done task");
+    }
+
+    #[test]
+    fn test_display_with_due_date() {
+        let task = Task {
+            description: "Task".to_string(),
+            completed: false,
+            due_date: Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()),
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: None,
+            recurrence: None,
+        };
+        assert_eq!(task.to_string(), "- [ ] Task 📅 2024-01-15");
+    }
+
+    #[test]
+    fn test_display_with_priority() {
+        let task = Task {
+            description: "Urgent".to_string(),
+            completed: false,
+            due_date: None,
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: Some(Priority::Highest),
+            recurrence: None,
+        };
+        assert_eq!(task.to_string(), "- [ ] Urgent ⏫");
+    }
+
+    #[test]
+    fn test_display_all_fields() {
+        let task = Task {
+            description: "Complete task".to_string(),
+            completed: true,
+            due_date: Some(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap()),
+            scheduled_date: Some(NaiveDate::from_ymd_opt(2024, 1, 5).unwrap()),
+            start_date: Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()),
+            done_date: Some(NaiveDate::from_ymd_opt(2024, 1, 8).unwrap()),
+            priority: Some(Priority::Highest),
+            recurrence: Some("every week".to_string()),
+        };
+        assert_eq!(
+            task.to_string(),
+            "- [x] Complete task ⏫ 🔁 every week 🛫 2024-01-01 ⏳ 2024-01-05 📅 2024-01-10 ✅ 2024-01-08"
+        );
+    }
+
+    #[test]
+    fn test_display_roundtrip() {
+        let original = "- [ ] Project deadline ⏫ 📅 2024-06-30 🛫 2024-06-01";
+        let task = parse_task_line(original).unwrap();
+        let displayed = task.to_string();
+        // Parse again and compare
+        let reparsed = parse_task_line(&displayed).unwrap();
+        assert_eq!(task.description, reparsed.description);
+        assert_eq!(task.priority, reparsed.priority);
+        assert_eq!(task.due_date, reparsed.due_date);
+        assert_eq!(task.start_date, reparsed.start_date);
     }
 }

@@ -4,12 +4,14 @@
 //! like `#parent/child/grandchild`.
 
 use ignore::WalkBuilder;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::Path;
 
 /// A parsed tag from an Obsidian markdown file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tag {
     /// The full tag text without the leading `#`.
     pub name: String,
@@ -24,6 +26,12 @@ impl Tag {
             name: name.to_string(),
             parts,
         }
+    }
+}
+
+impl fmt::Display for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.name)
     }
 }
 

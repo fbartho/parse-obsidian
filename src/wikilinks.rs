@@ -4,12 +4,14 @@
 //! with optional display text and heading anchors.
 
 use ignore::WalkBuilder;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::Path;
 
 /// A parsed wikilink from an Obsidian markdown file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Wikilink {
     /// The target page name.
     pub target: String,
@@ -17,6 +19,19 @@ pub struct Wikilink {
     pub heading: Option<String>,
     /// Optional display text (from `[[Page|Display]]`).
     pub display: Option<String>,
+}
+
+impl fmt::Display for Wikilink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[[{}", self.target)?;
+        if let Some(heading) = &self.heading {
+            write!(f, "#{}", heading)?;
+        }
+        if let Some(display) = &self.display {
+            write!(f, "|{}", display)?;
+        }
+        write!(f, "]]")
+    }
 }
 
 /// Extracts and parses all wikilinks from the given text.
