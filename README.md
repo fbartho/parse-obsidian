@@ -12,6 +12,16 @@ Obsidian files are markdown-based but include additional syntax and conventions 
 - Links and images
 - Emphasis, bold, strikethrough
 
+### Tasks Plugin
+Parses checkbox items with emoji-based metadata. See [Tasks plugin documentation](https://publish.obsidian.md/tasks/).
+
+- Due dates: `📅 2024-01-15`
+- Scheduled dates: `⏳ 2024-01-10`
+- Start dates: `🛫 2024-01-01`
+- Priority: `⏫` (highest), `🔼` (high), `🔽` (low), `⏬` (lowest)
+- Recurrence: `🔁 every week`
+- Done dates: `✅ 2024-01-15`
+
 ## Not Implemented
 
 ### Obsidian Extensions
@@ -19,15 +29,6 @@ Obsidian files are markdown-based but include additional syntax and conventions 
 - Tags: `#tag` and nested `#parent/child`
 - Embeds: `![[file]]` and `![[file#heading]]`
 - Callouts: `> [!note]` style blocks
-
-### Plugin Conventions
-- **Tasks plugin**: Checkbox items with emoji-based metadata
-  - Due dates: `📅 2024-01-15`
-  - Scheduled dates: `⏳ 2024-01-10`
-  - Start dates: `🛫 2024-01-01`
-  - Priority: `⏫` (high), `🔼` (medium), `🔽` (low), `⏬` (lowest)
-  - Recurrence: `🔁 every week`
-  - Done dates: `✅ 2024-01-15`
 
 ### Frontmatter
 - YAML metadata block parsing

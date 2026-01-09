@@ -1,0 +1,427 @@
+//! Parser for Obsidian Tasks plugin format.
+//!
+//! The Tasks plugin extends markdown checkboxes with emoji-based metadata for
+//! due dates, scheduling, priorities, and recurrence.
+//!
+//! See the Tasks plugin documentation: <https://publish.obsidian.md/tasks/>
+
+use chrono::NaiveDate;
+
+/// Task priority levels supported by the Tasks plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Priority {
+    /// ⏫ Highest priority
+    Highest,
+    /// 🔼 High priority
+    High,
+    /// 🔽 Low priority
+    Low,
+    /// ⏬ Lowest priority
+    Lowest,
+}
+
+/// A parsed task from an Obsidian markdown file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Task {
+    /// The task description with metadata stripped out.
+    pub description: String,
+    /// Whether the task is completed (marked with `[x]` or `[X]`).
+    pub completed: bool,
+    /// Due date from `📅 YYYY-MM-DD`.
+    pub due_date: Option<NaiveDate>,
+    /// Scheduled date from `⏳ YYYY-MM-DD`.
+    pub scheduled_date: Option<NaiveDate>,
+    /// Start date from `🛫 YYYY-MM-DD`.
+    pub start_date: Option<NaiveDate>,
+    /// Completion date from `✅ YYYY-MM-DD`.
+    pub done_date: Option<NaiveDate>,
+    /// Priority level from emoji markers.
+    pub priority: Option<Priority>,
+    /// Recurrence rule from `🔁 <pattern>`.
+    pub recurrence: Option<String>,
+}
+
+/// Extracts and parses all tasks from the given text.
+///
+/// Looks for lines matching the checkbox pattern `- [ ]` or `- [x]` and parses
+/// any Tasks plugin metadata from them.
+pub fn parse_tasks(input: &str) -> Vec<Task> {
+    input
+        .lines()
+        .filter_map(|line| parse_task_line(line.trim_start()))
+        .collect()
+}
+
+/// Attempts to parse a single line as a task.
+///
+/// Returns `None` if the line doesn't match the task checkbox pattern.
+pub fn parse_task_line(line: &str) -> Option<Task> {
+    // Match checkbox pattern: - [ ], - [x], - [X]
+    let after_checkbox = if line.starts_with("- [ ] ") {
+        Some((false, &line[6..]))
+    } else if line.starts_with("- [x] ") || line.starts_with("- [X] ") {
+        Some((true, &line[6..]))
+    } else {
+        None
+    }?;
+
+    let (completed, text) = after_checkbox;
+    let mut description_parts: Vec<&str> = Vec::new();
+    let mut due_date = None;
+    let mut scheduled_date = None;
+    let mut start_date = None;
+    let mut done_date = None;
+    let mut priority = None;
+    let mut recurrence = None;
+
+    let mut chars = text.char_indices().peekable();
+
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '📅' => {
+                if let Some(date) = extract_date(text, i) {
+                    due_date = Some(date);
+                    // Skip past the date (space + 10 chars for YYYY-MM-DD)
+                    skip_date(&mut chars);
+                } else {
+                    description_parts.push(&text[i..i + c.len_utf8()]);
+                }
+            }
+            '⏳' => {
+                if let Some(date) = extract_date(text, i) {
+                    scheduled_date = Some(date);
+                    skip_date(&mut chars);
+                } else {
+                    description_parts.push(&text[i..i + c.len_utf8()]);
+                }
+            }
+            '🛫' => {
+                if let Some(date) = extract_date(text, i) {
+                    start_date = Some(date);
+                    skip_date(&mut chars);
+                } else {
+                    description_parts.push(&text[i..i + c.len_utf8()]);
+                }
+            }
+            '✅' => {
+                if let Some(date) = extract_date(text, i) {
+                    done_date = Some(date);
+                    skip_date(&mut chars);
+                } else {
+                    description_parts.push(&text[i..i + c.len_utf8()]);
+                }
+            }
+            '⏫' => {
+                priority = Some(Priority::Highest);
+            }
+            '🔼' => {
+                priority = Some(Priority::High);
+            }
+            '🔽' => {
+                priority = Some(Priority::Low);
+            }
+            '⏬' => {
+                priority = Some(Priority::Lowest);
+            }
+            '🔁' => {
+                // Recurrence: extract everything until end of line or next emoji
+                if let Some(rule) = extract_recurrence(text, i) {
+                    recurrence = Some(rule);
+                    // Skip to end since recurrence consumes the rest
+                    break;
+                } else {
+                    description_parts.push(&text[i..i + c.len_utf8()]);
+                }
+            }
+            _ => {
+                // Regular character - find the extent of this text segment
+                let start = i;
+                let mut end = i + c.len_utf8();
+                while let Some(&(j, next_c)) = chars.peek() {
+                    if is_metadata_emoji(next_c) {
+                        break;
+                    }
+                    end = j + next_c.len_utf8();
+                    chars.next();
+                }
+                description_parts.push(&text[start..end]);
+            }
+        }
+    }
+
+    let description = description_parts.concat().trim().to_string();
+
+    Some(Task {
+        description,
+        completed,
+        due_date,
+        scheduled_date,
+        start_date,
+        done_date,
+        priority,
+        recurrence,
+    })
+}
+
+fn is_metadata_emoji(c: char) -> bool {
+    matches!(c, '📅' | '⏳' | '🛫' | '✅' | '⏫' | '🔼' | '🔽' | '⏬' | '🔁')
+}
+
+fn extract_date(text: &str, emoji_pos: usize) -> Option<NaiveDate> {
+    // Expect: emoji followed by space and YYYY-MM-DD
+    let after_emoji = &text[emoji_pos..];
+    let mut chars = after_emoji.chars();
+    chars.next(); // skip emoji
+
+    // Skip optional space
+    let rest: String = chars.collect();
+    let rest = rest.trim_start();
+
+    if rest.len() >= 10 {
+        let date_str = &rest[..10];
+        NaiveDate::parse_from_str(date_str, "%Y-%m-%d").ok()
+    } else {
+        None
+    }
+}
+
+fn skip_date(chars: &mut std::iter::Peekable<std::str::CharIndices>) {
+    // Skip space and date characters (YYYY-MM-DD = 10 chars + optional space)
+    let mut count = 0;
+    while let Some(&(_, c)) = chars.peek() {
+        if count > 11 || is_metadata_emoji(c) {
+            break;
+        }
+        if c == ' ' || c == '-' || c.is_ascii_digit() {
+            chars.next();
+            count += 1;
+        } else {
+            break;
+        }
+    }
+}
+
+fn extract_recurrence(text: &str, emoji_pos: usize) -> Option<String> {
+    let after_emoji = &text[emoji_pos..];
+    let mut chars = after_emoji.chars();
+    chars.next(); // skip emoji
+
+    let rest: String = chars.collect();
+    let rest = rest.trim_start();
+
+    if rest.is_empty() {
+        None
+    } else {
+        // Take until we hit another metadata emoji or end of string
+        let end_pos = rest
+            .char_indices()
+            .find(|(_, c)| is_metadata_emoji(*c))
+            .map(|(i, _)| i)
+            .unwrap_or(rest.len());
+        let rule = rest[..end_pos].trim().to_string();
+        if rule.is_empty() {
+            None
+        } else {
+            Some(rule)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_incomplete_task() {
+        let task = parse_task_line("- [ ] Buy groceries").unwrap();
+        assert_eq!(task.description, "Buy groceries");
+        assert!(!task.completed);
+        assert!(task.due_date.is_none());
+    }
+
+    #[test]
+    fn test_simple_completed_task() {
+        let task = parse_task_line("- [x] Buy groceries").unwrap();
+        assert_eq!(task.description, "Buy groceries");
+        assert!(task.completed);
+    }
+
+    #[test]
+    fn test_completed_uppercase_x() {
+        let task = parse_task_line("- [X] Buy groceries").unwrap();
+        assert!(task.completed);
+    }
+
+    #[test]
+    fn test_due_date() {
+        let task = parse_task_line("- [ ] Buy groceries 📅 2024-01-15").unwrap();
+        assert_eq!(task.description, "Buy groceries");
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+    }
+
+    #[test]
+    fn test_scheduled_date() {
+        let task = parse_task_line("- [ ] Call mom ⏳ 2024-02-20").unwrap();
+        assert_eq!(task.description, "Call mom");
+        assert_eq!(task.scheduled_date, Some(NaiveDate::from_ymd_opt(2024, 2, 20).unwrap()));
+    }
+
+    #[test]
+    fn test_start_date() {
+        let task = parse_task_line("- [ ] Start project 🛫 2024-03-01").unwrap();
+        assert_eq!(task.description, "Start project");
+        assert_eq!(task.start_date, Some(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap()));
+    }
+
+    #[test]
+    fn test_done_date() {
+        let task = parse_task_line("- [x] Finished task ✅ 2024-01-10").unwrap();
+        assert_eq!(task.description, "Finished task");
+        assert!(task.completed);
+        assert_eq!(task.done_date, Some(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap()));
+    }
+
+    #[test]
+    fn test_priority_highest() {
+        let task = parse_task_line("- [ ] Urgent task ⏫").unwrap();
+        assert_eq!(task.description, "Urgent task");
+        assert_eq!(task.priority, Some(Priority::Highest));
+    }
+
+    #[test]
+    fn test_priority_high() {
+        let task = parse_task_line("- [ ] Important task 🔼").unwrap();
+        assert_eq!(task.description, "Important task");
+        assert_eq!(task.priority, Some(Priority::High));
+    }
+
+    #[test]
+    fn test_priority_low() {
+        let task = parse_task_line("- [ ] Low priority task 🔽").unwrap();
+        assert_eq!(task.description, "Low priority task");
+        assert_eq!(task.priority, Some(Priority::Low));
+    }
+
+    #[test]
+    fn test_priority_lowest() {
+        let task = parse_task_line("- [ ] Someday task ⏬").unwrap();
+        assert_eq!(task.description, "Someday task");
+        assert_eq!(task.priority, Some(Priority::Lowest));
+    }
+
+    #[test]
+    fn test_recurrence() {
+        let task = parse_task_line("- [ ] Weekly review 🔁 every week").unwrap();
+        assert_eq!(task.description, "Weekly review");
+        assert_eq!(task.recurrence, Some("every week".to_string()));
+    }
+
+    #[test]
+    fn test_recurrence_complex() {
+        let task = parse_task_line("- [ ] Pay rent 🔁 every month on the 1st").unwrap();
+        assert_eq!(task.description, "Pay rent");
+        assert_eq!(task.recurrence, Some("every month on the 1st".to_string()));
+    }
+
+    #[test]
+    fn test_multiple_metadata() {
+        let task = parse_task_line("- [ ] Project deadline ⏫ 📅 2024-06-30 🛫 2024-06-01").unwrap();
+        assert_eq!(task.description, "Project deadline");
+        assert_eq!(task.priority, Some(Priority::Highest));
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 6, 30).unwrap()));
+        assert_eq!(task.start_date, Some(NaiveDate::from_ymd_opt(2024, 6, 1).unwrap()));
+    }
+
+    #[test]
+    fn test_all_metadata() {
+        let task = parse_task_line(
+            "- [x] Complete task 🛫 2024-01-01 ⏳ 2024-01-05 📅 2024-01-10 ✅ 2024-01-08 ⏫ 🔁 every week"
+        ).unwrap();
+        assert_eq!(task.description, "Complete task");
+        assert!(task.completed);
+        assert_eq!(task.start_date, Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()));
+        assert_eq!(task.scheduled_date, Some(NaiveDate::from_ymd_opt(2024, 1, 5).unwrap()));
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap()));
+        assert_eq!(task.done_date, Some(NaiveDate::from_ymd_opt(2024, 1, 8).unwrap()));
+        assert_eq!(task.priority, Some(Priority::Highest));
+        assert_eq!(task.recurrence, Some("every week".to_string()));
+    }
+
+    #[test]
+    fn test_metadata_at_start() {
+        let task = parse_task_line("- [ ] 📅 2024-01-15 Buy groceries").unwrap();
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+        assert_eq!(task.description, "Buy groceries");
+    }
+
+    #[test]
+    fn test_metadata_in_middle() {
+        let task = parse_task_line("- [ ] Buy 📅 2024-01-15 groceries").unwrap();
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+        assert_eq!(task.description, "Buy groceries");
+    }
+
+    #[test]
+    fn test_not_a_task() {
+        assert!(parse_task_line("Just regular text").is_none());
+        assert!(parse_task_line("- Regular list item").is_none());
+        assert!(parse_task_line("* [ ] Wrong bullet").is_none());
+    }
+
+    #[test]
+    fn test_parse_tasks_multiple() {
+        let input = r#"
+# My Tasks
+
+- [ ] First task 📅 2024-01-15
+- [x] Second task ✅ 2024-01-10
+- Regular list item
+- [ ] Third task ⏫
+
+Some other text
+"#;
+        let tasks = parse_tasks(input);
+        assert_eq!(tasks.len(), 3);
+        assert_eq!(tasks[0].description, "First task");
+        assert_eq!(tasks[1].description, "Second task");
+        assert_eq!(tasks[2].description, "Third task");
+    }
+
+    #[test]
+    fn test_indented_task() {
+        let input = "    - [ ] Indented task 📅 2024-01-15";
+        let tasks = parse_tasks(input);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].description, "Indented task");
+        assert_eq!(tasks[0].due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+    }
+
+    #[test]
+    fn test_invalid_date_format() {
+        let task = parse_task_line("- [ ] Task 📅 not-a-date").unwrap();
+        assert!(task.due_date.is_none());
+        // The emoji becomes part of description when date is invalid
+        assert!(task.description.contains("📅"));
+    }
+
+    #[test]
+    fn test_empty_task() {
+        let task = parse_task_line("- [ ] ").unwrap();
+        assert_eq!(task.description, "");
+        assert!(!task.completed);
+    }
+
+    #[test]
+    fn test_task_with_links() {
+        let task = parse_task_line("- [ ] Review [[Project Plan]] 📅 2024-01-15").unwrap();
+        assert_eq!(task.description, "Review [[Project Plan]]");
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+    }
+
+    #[test]
+    fn test_task_with_tags() {
+        let task = parse_task_line("- [ ] Fix bug #urgent #backend 📅 2024-01-15").unwrap();
+        assert_eq!(task.description, "Fix bug #urgent #backend");
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+    }
+}
