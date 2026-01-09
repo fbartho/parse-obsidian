@@ -6,6 +6,10 @@
 //! See the Tasks plugin documentation: <https://publish.obsidian.md/tasks/>
 
 use chrono::NaiveDate;
+use ignore::WalkBuilder;
+use std::fs;
+use std::io;
+use std::path::Path;
 
 /// Task priority levels supported by the Tasks plugin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +54,34 @@ pub fn parse_tasks(input: &str) -> Vec<Task> {
         .lines()
         .filter_map(|line| parse_task_line(line.trim_start()))
         .collect()
+}
+
+/// Finds and parses all tasks from markdown files at the given path.
+///
+/// If `path` is a file, parses tasks from that file.
+/// If `path` is a directory, recursively walks it and parses all `.md` files.
+/// Respects `.gitignore` and other ignore files.
+pub fn find_tasks<P: AsRef<Path>>(path: P) -> io::Result<Vec<Task>> {
+    let path = path.as_ref();
+    let mut results = Vec::new();
+
+    if path.is_file() {
+        if path.extension().is_some_and(|ext| ext == "md") {
+            let content = fs::read_to_string(path)?;
+            results.extend(parse_tasks(&content));
+        }
+    } else if path.is_dir() {
+        for entry in WalkBuilder::new(path).build() {
+            let entry = entry.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let entry_path = entry.path();
+            if entry_path.is_file() && entry_path.extension().is_some_and(|ext| ext == "md") {
+                let content = fs::read_to_string(entry_path)?;
+                results.extend(parse_tasks(&content));
+            }
+        }
+    }
+
+    Ok(results)
 }
 
 /// Attempts to parse a single line as a task.

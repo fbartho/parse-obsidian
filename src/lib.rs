@@ -1,3 +1,3 @@
 pub mod tasks;
 
-pub use tasks::{Priority, Task};
+pub use tasks::{find_tasks, Priority, Task};
