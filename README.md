@@ -22,11 +22,17 @@ Parses checkbox items with emoji-based metadata. See [Tasks plugin documentation
 - Recurrence: `🔁 every week`
 - Done dates: `✅ 2024-01-15`
 
+### Tags
+Parses inline tags including nested hierarchies.
+
+- Simple tags: `#tag`
+- Nested tags: `#parent/child/grandchild`
+- Distinguishes from headings (`# Heading` is not a tag)
+
 ## Not Implemented
 
 ### Obsidian Extensions
 - Wikilinks: `[[Page Name]]` and `[[Page Name|Display Text]]`
-- Tags: `#tag` and nested `#parent/child`
 - Embeds: `![[file]]` and `![[file#heading]]`
 - Callouts: `> [!note]` style blocks
 
