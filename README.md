@@ -7,12 +7,14 @@ Obsidian files are markdown-based but include additional syntax and conventions 
 ## Implemented
 
 ### Core Markdown (via comrak)
+
 - Headings, paragraphs, lists
 - Code blocks (inline and fenced)
 - Links and images
 - Emphasis, bold, strikethrough
 
 ### Tasks Plugin
+
 Parses checkbox items with emoji-based metadata. See [Tasks plugin documentation](https://publish.obsidian.md/tasks/).
 
 - Due dates: `📅 2024-01-15`
@@ -23,6 +25,7 @@ Parses checkbox items with emoji-based metadata. See [Tasks plugin documentation
 - Done dates: `✅ 2024-01-15`
 
 ### Tags
+
 Parses inline tags including nested hierarchies.
 
 - Simple tags: `#tag`
@@ -30,6 +33,7 @@ Parses inline tags including nested hierarchies.
 - Distinguishes from headings (`# Heading` is not a tag)
 
 ### Wikilinks
+
 Parses internal links between notes.
 
 - Simple links: `[[Page Name]]`
@@ -37,12 +41,21 @@ Parses internal links between notes.
 - Heading anchors: `[[Page Name#Section]]`
 - Combined: `[[Page Name#Section|display text]]`
 
+### Frontmatter
+
+Parses YAML metadata blocks at the top of files.
+
+- Returns `HashMap<String, serde_yaml::Value>` for flexible access
+- Supports all YAML types: strings, numbers, booleans, arrays, nested objects
+- Handles Obsidian properties like `tags`, `aliases`, `cssclasses`
+
 ## Not Implemented
 
 ### Obsidian Extensions
+
 - Embeds: `![[file]]` and `![[file#heading]]`
 - Callouts: `> [!note]` style blocks
 
-### Frontmatter
-- YAML metadata block parsing
-- Property access and modification
+### Functionality
+
+- Editing
