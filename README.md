@@ -29,10 +29,17 @@ Parses inline tags including nested hierarchies.
 - Nested tags: `#parent/child/grandchild`
 - Distinguishes from headings (`# Heading` is not a tag)
 
+### Wikilinks
+Parses internal links between notes.
+
+- Simple links: `[[Page Name]]`
+- Display text: `[[Page Name|click here]]`
+- Heading anchors: `[[Page Name#Section]]`
+- Combined: `[[Page Name#Section|display text]]`
+
 ## Not Implemented
 
 ### Obsidian Extensions
-- Wikilinks: `[[Page Name]]` and `[[Page Name|Display Text]]`
 - Embeds: `![[file]]` and `![[file#heading]]`
 - Callouts: `> [!note]` style blocks
 
