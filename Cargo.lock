@@ -637,9 +637,11 @@ name = "parse-obsidian"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clap",
  "comrak",
  "ignore",
  "serde",
+ "serde_json",
  "serde_yml",
 ]
 

@@ -45,16 +45,22 @@ pub struct Task {
     /// Whether the task is completed (marked with `[x]` or `[X]`).
     pub completed: bool,
     /// Due date from `📅 YYYY-MM-DD`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<NaiveDate>,
     /// Scheduled date from `⏳ YYYY-MM-DD`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduled_date: Option<NaiveDate>,
     /// Start date from `🛫 YYYY-MM-DD`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<NaiveDate>,
     /// Completion date from `✅ YYYY-MM-DD`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub done_date: Option<NaiveDate>,
     /// Priority level from emoji markers.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
     /// Recurrence rule from `🔁 <pattern>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub recurrence: Option<String>,
 }
 
