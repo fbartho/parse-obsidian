@@ -79,7 +79,7 @@ pub fn find_frontmatter<P: AsRef<Path>>(path: P) -> io::Result<Vec<(std::path::P
         }
     } else if path.is_dir() {
         for entry in WalkBuilder::new(path).build() {
-            let entry = entry.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let entry = entry.map_err(io::Error::other)?;
             let entry_path = entry.path();
             if entry_path.is_file() && entry_path.extension().is_some_and(|ext| ext == "md") {
                 let content = fs::read_to_string(entry_path)?;

@@ -68,11 +68,11 @@ pub fn parse_tags(input: &str) -> Vec<Tag> {
                 // Check if at start of line (could be heading)
                 if i == 0 || (i > 0 && line[..i].trim().is_empty()) {
                     // At start of line - check if it's a heading
-                    if let Some(&(_, next_c)) = chars.peek() {
-                        if next_c == ' ' || next_c == '#' {
-                            // It's a heading, skip
-                            continue;
-                        }
+                    if let Some(&(_, next_c)) = chars.peek()
+                        && (next_c == ' ' || next_c == '#')
+                    {
+                        // It's a heading, skip
+                        continue;
                     }
                 }
 
@@ -118,7 +118,7 @@ pub fn find_tags<P: AsRef<Path>>(path: P) -> io::Result<Vec<Tag>> {
         }
     } else if path.is_dir() {
         for entry in WalkBuilder::new(path).build() {
-            let entry = entry.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let entry = entry.map_err(io::Error::other)?;
             let entry_path = entry.path();
             if entry_path.is_file() && entry_path.extension().is_some_and(|ext| ext == "md") {
                 let content = fs::read_to_string(entry_path)?;

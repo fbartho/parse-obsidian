@@ -44,6 +44,14 @@ pub struct Task {
     pub description: String,
     /// Whether the task is completed (marked with `[x]` or `[X]`).
     pub completed: bool,
+    /// The raw status symbol character from `[X]`. Common values:
+    /// - ` ` (space) = incomplete
+    /// - `x` or `X` = complete
+    /// - `/` = in progress
+    /// - `-` = cancelled
+    ///
+    /// See: <https://publish.obsidian.md/tasks/Getting+Started/Statuses>
+    pub status_symbol: String,
     /// Due date from `📅 YYYY-MM-DD`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<NaiveDate>,
@@ -66,8 +74,7 @@ pub struct Task {
 
 impl fmt::Display for Task {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let checkbox = if self.completed { "[x]" } else { "[ ]" };
-        write!(f, "- {} {}", checkbox, self.description)?;
+        write!(f, "- [{}] {}", self.status_symbol, self.description)?;
 
         if let Some(priority) = &self.priority {
             write!(f, " {}", priority)?;
@@ -119,7 +126,7 @@ pub fn find_tasks<P: AsRef<Path>>(path: P) -> io::Result<Vec<Task>> {
         }
     } else if path.is_dir() {
         for entry in WalkBuilder::new(path).build() {
-            let entry = entry.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let entry = entry.map_err(io::Error::other)?;
             let entry_path = entry.path();
             if entry_path.is_file() && entry_path.extension().is_some_and(|ext| ext == "md") {
                 let content = fs::read_to_string(entry_path)?;
@@ -134,17 +141,49 @@ pub fn find_tasks<P: AsRef<Path>>(path: P) -> io::Result<Vec<Task>> {
 /// Attempts to parse a single line as a task.
 ///
 /// Returns `None` if the line doesn't match the task checkbox pattern.
+/// Supports custom status symbols: `- [/]` for in-progress, `- [-]` for cancelled, etc.
+/// See: <https://publish.obsidian.md/tasks/Getting+Started/Statuses>
 pub fn parse_task_line(line: &str) -> Option<Task> {
-    // Match checkbox pattern: - [ ], - [x], - [X]
-    let after_checkbox = if line.starts_with("- [ ] ") {
-        Some((false, &line[6..]))
-    } else if line.starts_with("- [x] ") || line.starts_with("- [X] ") {
-        Some((true, &line[6..]))
-    } else {
-        None
-    }?;
+    // Match checkbox pattern: - [X] where X is any single character
+    if !line.starts_with("- [") {
+        return None;
+    }
 
-    let (completed, text) = after_checkbox;
+    // Find the closing bracket
+    let close_bracket_pos = line.find(']')?;
+    if close_bracket_pos != 4 {
+        // Must be exactly "- [X]" where X is one char
+        return None;
+    }
+
+    // Extract the status symbol (single character at position 3)
+    let status_char = line.chars().nth(3)?;
+    let status_symbol = status_char.to_string();
+
+    // Check for space after closing bracket
+    if line.len() <= 5 {
+        // "- [X]" with nothing after - valid empty task
+        let completed = matches!(status_char, 'x' | 'X');
+        return Some(Task {
+            description: String::new(),
+            completed,
+            status_symbol,
+            due_date: None,
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: None,
+            recurrence: None,
+        });
+    }
+
+    // Must have space after bracket
+    if !line[5..].starts_with(' ') {
+        return None;
+    }
+
+    let text = &line[6..];
+    let completed = matches!(status_char, 'x' | 'X');
     let mut description_parts: Vec<&str> = Vec::new();
     let mut due_date = None;
     let mut scheduled_date = None;
@@ -233,6 +272,7 @@ pub fn parse_task_line(line: &str) -> Option<Task> {
     Some(Task {
         description,
         completed,
+        status_symbol,
         due_date,
         scheduled_date,
         start_date,
@@ -509,6 +549,7 @@ Some other text
         let task = Task {
             description: "Buy groceries".to_string(),
             completed: false,
+            status_symbol: " ".to_string(),
             due_date: None,
             scheduled_date: None,
             start_date: None,
@@ -524,6 +565,7 @@ Some other text
         let task = Task {
             description: "Done task".to_string(),
             completed: true,
+            status_symbol: "x".to_string(),
             due_date: None,
             scheduled_date: None,
             start_date: None,
@@ -539,6 +581,7 @@ Some other text
         let task = Task {
             description: "Task".to_string(),
             completed: false,
+            status_symbol: " ".to_string(),
             due_date: Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()),
             scheduled_date: None,
             start_date: None,
@@ -554,6 +597,7 @@ Some other text
         let task = Task {
             description: "Urgent".to_string(),
             completed: false,
+            status_symbol: " ".to_string(),
             due_date: None,
             scheduled_date: None,
             start_date: None,
@@ -569,6 +613,7 @@ Some other text
         let task = Task {
             description: "Complete task".to_string(),
             completed: true,
+            status_symbol: "x".to_string(),
             due_date: Some(NaiveDate::from_ymd_opt(2024, 1, 10).unwrap()),
             scheduled_date: Some(NaiveDate::from_ymd_opt(2024, 1, 5).unwrap()),
             start_date: Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()),
@@ -593,5 +638,110 @@ Some other text
         assert_eq!(task.priority, reparsed.priority);
         assert_eq!(task.due_date, reparsed.due_date);
         assert_eq!(task.start_date, reparsed.start_date);
+    }
+
+    // Custom status symbol tests
+    #[test]
+    fn test_in_progress_status() {
+        let task = parse_task_line("- [/] In progress task").unwrap();
+        assert_eq!(task.description, "In progress task");
+        assert!(!task.completed);
+        assert_eq!(task.status_symbol, "/");
+    }
+
+    #[test]
+    fn test_cancelled_status() {
+        let task = parse_task_line("- [-] Cancelled task").unwrap();
+        assert_eq!(task.description, "Cancelled task");
+        assert!(!task.completed);
+        assert_eq!(task.status_symbol, "-");
+    }
+
+    #[test]
+    fn test_custom_status_with_metadata() {
+        let task = parse_task_line("- [/] Working on it 📅 2024-01-15 ⏫").unwrap();
+        assert_eq!(task.description, "Working on it");
+        assert!(!task.completed);
+        assert_eq!(task.status_symbol, "/");
+        assert_eq!(task.due_date, Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap()));
+        assert_eq!(task.priority, Some(Priority::Highest));
+    }
+
+    #[test]
+    fn test_status_symbol_space() {
+        let task = parse_task_line("- [ ] Incomplete").unwrap();
+        assert_eq!(task.status_symbol, " ");
+        assert!(!task.completed);
+    }
+
+    #[test]
+    fn test_status_symbol_lowercase_x() {
+        let task = parse_task_line("- [x] Done").unwrap();
+        assert_eq!(task.status_symbol, "x");
+        assert!(task.completed);
+    }
+
+    #[test]
+    fn test_status_symbol_uppercase_x() {
+        let task = parse_task_line("- [X] Done").unwrap();
+        assert_eq!(task.status_symbol, "X");
+        assert!(task.completed);
+    }
+
+    #[test]
+    fn test_display_in_progress() {
+        let task = Task {
+            description: "In progress".to_string(),
+            completed: false,
+            status_symbol: "/".to_string(),
+            due_date: None,
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: None,
+            recurrence: None,
+        };
+        assert_eq!(task.to_string(), "- [/] In progress");
+    }
+
+    #[test]
+    fn test_display_cancelled() {
+        let task = Task {
+            description: "Cancelled".to_string(),
+            completed: false,
+            status_symbol: "-".to_string(),
+            due_date: None,
+            scheduled_date: None,
+            start_date: None,
+            done_date: None,
+            priority: None,
+            recurrence: None,
+        };
+        assert_eq!(task.to_string(), "- [-] Cancelled");
+    }
+
+    #[test]
+    fn test_custom_status_roundtrip() {
+        let original = "- [/] In progress task 📅 2024-01-15";
+        let task = parse_task_line(original).unwrap();
+        let displayed = task.to_string();
+        let reparsed = parse_task_line(&displayed).unwrap();
+        assert_eq!(task.status_symbol, reparsed.status_symbol);
+        assert_eq!(task.description, reparsed.description);
+        assert_eq!(task.due_date, reparsed.due_date);
+    }
+
+    #[test]
+    fn test_question_mark_status() {
+        let task = parse_task_line("- [?] Maybe do this").unwrap();
+        assert_eq!(task.status_symbol, "?");
+        assert!(!task.completed);
+    }
+
+    #[test]
+    fn test_exclamation_status() {
+        let task = parse_task_line("- [!] Important").unwrap();
+        assert_eq!(task.status_symbol, "!");
+        assert!(!task.completed);
     }
 }
